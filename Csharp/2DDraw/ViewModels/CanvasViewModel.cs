@@ -4,48 +4,69 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Shapes;
+using System.Collections.Generic;
+using _2DDraw.Models;
 
 namespace _2DDraw.ViewModels
 {
     public sealed class CanvasViewModel : Screen
     {
-        public void MouseMove_Canvas(Canvas canvas, MouseEventArgs e) 
+        public void MouseMove_Canvas(Canvas canvas, MouseEventArgs e)
         {
             Point currentPos = e.GetPosition(canvas);
 
-            if(lastMousePosition == currentPos)
+            if (lastMousePosition == currentPos)
             {
                 return;
             }
 
-            if(isCurrentlyDrawing)
+            if (isCurrentlyDrawing)
             {
                 ShowPreview(canvas, e.GetPosition(canvas));
                 lastMousePosition = currentPos;
             }
         }
 
-        public void LeftMouseDown_Canvas(Canvas canvas, MouseEventArgs e)
+        public void LeftMouseDown_Canvas(Canvas canvas, MouseButtonEventArgs e)
         {
+            if (e.ClickCount == 2)
+            {
+                MouseDoubleClick_Canvas(canvas, e);
+                e.Handled = true;
+                return;
+            }
+
             if (!isCurrentlyDrawing)
             {
                 position1 = e.GetPosition(canvas);
                 isCurrentlyDrawing = true;
+                currentPolygon = new Polygon2D();
             }
             else
             {
                 position2 = e.GetPosition(canvas);
-                DrawLine(canvas, position1, position2);
+                currentPolygon?.Lines.Add(DrawLine(canvas, position1, position2));
                 isCurrentlyDrawing = false;
             }
         }
 
-        public void RightMouseDown_Canvas( Canvas canvas, MouseEventArgs e)
+        public void RightMouseDown_Canvas(Canvas canvas, MouseEventArgs e)
         {
             if (isCurrentlyDrawing)
             {
                 ClearPreview(canvas);
                 isCurrentlyDrawing = false;
+            }
+        }
+
+        public void MouseDoubleClick_Canvas(Canvas canvas, MouseEventArgs e)
+        {
+            if (currentPolygon != null)
+            {
+                currentPolygon.Finished = true;
+                polygons.Add(currentPolygon);
+
+                currentPolygon = new Polygon2D();
             }
         }
 
@@ -86,5 +107,7 @@ namespace _2DDraw.ViewModels
         private Point lastMousePosition;
         private bool isCurrentlyDrawing = false;
         private Line? previewLine;
+        private Polygon2D? currentPolygon;
+        private List<Polygon2D> polygons = new List<Polygon2D>();
     }
 }

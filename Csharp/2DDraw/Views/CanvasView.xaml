@@ -12,6 +12,7 @@
     <Canvas x:Name="DrawingCanvas" Background="White"
             cal:Message.Attach="[Event MouseLeftButtonDown] = [Action LeftMouseDown_Canvas($source, $eventArgs)];
                                 [Event MouseRightButtonDown] = [Action RightMouseDown_Canvas($source, $eventArgs)];
+                                [Event MouseDoubleClick] = [Action MouseDoubleClick_Canvas($source, $eventArgs)];
                                 [Event MouseMove] = [Action MouseMove_Canvas($source, $eventArgs)]">
             
     </Canvas>
