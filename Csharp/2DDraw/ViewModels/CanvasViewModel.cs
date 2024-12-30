@@ -4,13 +4,104 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Shapes;
-using System.Collections.Generic;
 using _2DDraw.Models;
 
 namespace _2DDraw.ViewModels
 {
     public sealed class CanvasViewModel : Screen
     {
+        public bool UndoEnabled => undoStack.Count > 0;
+        public bool RedoEnabled => redoStack.Count > 0;
+        public Canvas DrawingCanvas { get; set; }
+
+        public List<Polygon2D> Polygons = new List<Polygon2D>();
+
+        public void Undo()
+        {
+            if (undoStack.Count > 0 && DrawingCanvas != null)
+            {
+                // Pop the last line from the undo stack and push into redo stack
+                Line line = undoStack.Pop();
+                redoStack.Push(line);
+
+                // Find the polygon that contains the line
+                Polygon2D? polygon = Polygons.Find(p => p.Lines.Contains(line));
+
+                if (polygon != null)
+                {
+                    polygon.Lines.Remove(line);
+
+                    // if undone line is the last one, mark polygon as unfinished
+                    if (line == polygon.LastLine)
+                    {
+                        polygon.IsFinished = false;
+                    }
+
+                    // set pos1 to startpoint of undone line if polygon is not empty (for preview)
+                    if (polygon.Lines.Count > 0)
+                    {
+                        position1 = new Point(line.X1, line.Y1);
+                        isDrawing = true;
+                    }
+                    else
+                    {
+                        isDrawing = false;
+                    }
+                }
+
+                currentPolygon = polygon;
+
+                // Refresh the canvas
+                RedrawCanvas(DrawingCanvas);
+                Refresh();
+            }
+        }
+
+        public void Redo()
+        {
+            if (redoStack.Count > 0 && DrawingCanvas != null)
+            {
+                // Pop the last line from the redo stack and push into undo stack
+                Line line = redoStack.Pop();
+                undoStack.Push(line);
+
+                Polygon2D? polygon = currentPolygon;
+
+                if (polygon != null)
+                {
+                    polygon.Lines.Add(line);
+
+                    // if redone is the last line, mark polygon as finished
+                    if (polygon.LastLine == line)
+                    {
+                        polygon.IsFinished = true;
+
+                        // set currentPolygon to the next one or to null if its the last one
+                        if (polygon == Polygons.Last())
+                        {
+                            currentPolygon = null;
+                        }
+                        else
+                        {
+                            currentPolygon = Polygons[Polygons.IndexOf(polygon) + 1];
+                        }
+
+                        isDrawing = false;
+                    }
+                    else
+                    {
+                        // set pos1 to endpoint of redone line
+                        position1 = new Point(line.X2, line.Y2);
+                        isDrawing = true;
+                    }
+                }
+
+                // Refresh the canvas
+                RedrawCanvas(DrawingCanvas);
+                Refresh();
+            }
+        }
+
         public void MouseMove_Canvas(Canvas canvas, MouseEventArgs e)
         {
             Point currentPos = e.GetPosition(canvas);
@@ -20,9 +111,9 @@ namespace _2DDraw.ViewModels
                 return;
             }
 
-            if (isCurrentlyDrawing)
+            if (isDrawing)
             {
-                ShowPreview(canvas, e.GetPosition(canvas));
+                ShowPreview(canvas, currentPos);
                 lastMousePosition = currentPos;
             }
         }
@@ -36,26 +127,23 @@ namespace _2DDraw.ViewModels
                 return;
             }
 
-            if (!isCurrentlyDrawing)
+            if (!isDrawing)
             {
                 position1 = e.GetPosition(canvas);
-                isCurrentlyDrawing = true;
                 currentPolygon = new Polygon2D();
+                Polygons.Add(currentPolygon);
+
+                isDrawing = true;
             }
             else
             {
                 position2 = e.GetPosition(canvas);
-                currentPolygon?.Lines.Add(DrawLine(canvas, position1, position2));
-                isCurrentlyDrawing = false;
-            }
-        }
+                Line line = DrawLine(canvas, position1, position2, Brushes.Black);
+                currentPolygon?.Lines.Add(line);
+                undoStack.Push(line);
+                redoStack.Clear();
 
-        public void RightMouseDown_Canvas(Canvas canvas, MouseEventArgs e)
-        {
-            if (isCurrentlyDrawing)
-            {
-                ClearPreview(canvas);
-                isCurrentlyDrawing = false;
+                position1 = position2;
             }
         }
 
@@ -63,24 +151,35 @@ namespace _2DDraw.ViewModels
         {
             if (currentPolygon != null)
             {
-                currentPolygon.Finished = true;
-                polygons.Add(currentPolygon);
+                ClearPreview(canvas);
+                currentPolygon.LastLine = currentPolygon.Lines.Last();
+                RedrawCanvas(canvas);
 
-                currentPolygon = new Polygon2D();
+                currentPolygon = null;
+                isDrawing = false;
             }
         }
 
-        private Line DrawLine(Canvas canvas, Point pos1, Point pos2)
+        private void RedrawCanvas(Canvas canvas)
         {
-            Line line = new Line
+            canvas.Children.Clear();
+
+            Polygons.ForEach(p => DrawPolygon(canvas, p));
+        }
+
+        private void DrawPolygon(Canvas canvas, Polygon2D polygon)
+        {
+            Brush brush = polygon.IsFinished ? Brushes.Orange : Brushes.Black;
+            foreach (var line in polygon.Lines)
             {
-                X1 = pos1.X,
-                Y1 = pos1.Y,
-                X2 = pos2.X,
-                Y2 = pos2.Y,
-                Stroke = Brushes.Black,
-                StrokeThickness = 2
-            };
+                DrawLine(canvas, line, brush);
+            }
+        }
+
+        private Line DrawLine(Canvas canvas, Line line, Brush brush)
+        {
+            line.Stroke = brush;
+            line.StrokeThickness = 2;
 
             canvas?.Children.Add(line);
             Refresh();
@@ -88,10 +187,23 @@ namespace _2DDraw.ViewModels
             return line;
         }
 
+        private Line DrawLine(Canvas canvas, Point pos1, Point pos2, Brush brush)
+        {
+            Line line = new Line()
+            {
+                X1 = pos1.X,
+                Y1 = pos1.Y,
+                X2 = pos2.X,
+                Y2 = pos2.Y
+            };
+
+            return DrawLine(canvas, line, brush);
+        }
+
         private void ShowPreview(Canvas canvas, Point currentMousePosition)
         {
             ClearPreview(canvas);
-            previewLine = DrawLine(canvas, position1, currentMousePosition);
+            previewLine = DrawLine(canvas, position1, currentMousePosition, Brushes.Black);
         }
 
         private void ClearPreview(Canvas canvas)
@@ -105,9 +217,11 @@ namespace _2DDraw.ViewModels
         private Point position1;
         private Point position2;
         private Point lastMousePosition;
-        private bool isCurrentlyDrawing = false;
         private Line? previewLine;
         private Polygon2D? currentPolygon;
-        private List<Polygon2D> polygons = new List<Polygon2D>();
+        private bool isDrawing = false;
+
+        private Stack<Line> undoStack = new Stack<Line>();
+        private Stack<Line> redoStack = new Stack<Line>();
     }
 }
