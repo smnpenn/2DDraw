@@ -11,6 +11,8 @@ namespace _2DDraw.Models
     {
         public Line? Line { get; set; }
 
+        public Polygon2D? Polygon { get; set; }
+
         public DrawingAction Action { get; set; }
     }
 

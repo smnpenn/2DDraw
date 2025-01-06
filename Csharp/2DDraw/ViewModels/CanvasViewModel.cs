@@ -24,26 +24,21 @@ namespace _2DDraw.ViewModels
                 DrawingOperation op = undoStack.Pop();
                 redoStack.Push(op);
 
-                if( op.Action == DrawingAction.FinishPolygon)
-                {
+                Line line = op.Line!;
+                Polygon2D polygon = op.Polygon!;
 
+                if ( op.Action == DrawingAction.FinishPolygon)
+                {
+                    currentPolygon = polygon;
+                    currentPolygon.IsFinished = false;
+                    currentPolygon.LastLine = null;
+                    isDrawing = true;
                 }
                 else
                 {
-                    Line line = op.Line!;
-
-                    // Find the polygon that contains the line
-                    Polygon2D? polygon = Polygons.Find(p => p.Lines.Contains(line));
-
                     if (polygon != null)
                     {
                         polygon.Lines.Remove(line);
-
-                        // if undone line is the last one, mark polygon as unfinished
-                        if (line == polygon.LastLine)
-                        {
-                            polygon.IsFinished = false;
-                        }
 
                         // set pos1 to startpoint of undone line if polygon is not empty (for preview)
                         if (polygon.Lines.Count > 0)
@@ -73,43 +68,33 @@ namespace _2DDraw.ViewModels
                 DrawingOperation op = redoStack.Pop();
                 undoStack.Push(op);
 
+                Line line = op.Line!;
+                Polygon2D polygon = op.Polygon!;
+
                 if (op.Action == DrawingAction.FinishPolygon)
                 {
+                    polygon.IsFinished = true;
 
+                    // set currentPolygon to the next one or to null if its the last one
+                    if (polygon == Polygons.Last())
+                    {
+                        currentPolygon = null;
+                    }
+                    else
+                    {
+                        currentPolygon = Polygons[Polygons.IndexOf(polygon) + 1];
+                    }
+
+                    isDrawing = false;
                 }
                 else
                 {
-                    Line line = op.Line!;
-
-                    Polygon2D? polygon = currentPolygon;
-
                     if (polygon != null)
                     {
                         polygon.Lines.Add(line);
-
-                        // if redone is the last line, mark polygon as finished
-                        if (polygon.LastLine == line)
-                        {
-                            polygon.IsFinished = true;
-
-                            // set currentPolygon to the next one or to null if its the last one
-                            if (polygon == Polygons.Last())
-                            {
-                                currentPolygon = null;
-                            }
-                            else
-                            {
-                                currentPolygon = Polygons[Polygons.IndexOf(polygon) + 1];
-                            }
-
-                            isDrawing = false;
-                        }
-                        else
-                        {
-                            // set pos1 to endpoint of redone line
-                            position1 = new Point(line.X2, line.Y2);
-                            isDrawing = true;
-                        }
+                        // set pos1 to endpoint of redone line
+                        position1 = new Point(line.X2, line.Y2);
+                        isDrawing = true;
                     }
                 }
 
@@ -157,7 +142,7 @@ namespace _2DDraw.ViewModels
                 position2 = e.GetPosition(canvas);
                 Line line = DrawLine(canvas, position1, position2, Brushes.Black);
                 currentPolygon?.Lines.Add(line);
-                undoStack.Push(new() { Line = line, Action = DrawingAction.DrawLine });
+                undoStack.Push(new() { Line = line, Polygon = currentPolygon, Action = DrawingAction.DrawLine });
                 redoStack.Clear();
 
                 position1 = position2;
@@ -172,6 +157,7 @@ namespace _2DDraw.ViewModels
                 currentPolygon.LastLine = currentPolygon.Lines.Last();
                 RedrawCanvas(canvas);
 
+                undoStack.Push(new() { Line = null, Polygon = currentPolygon, Action = DrawingAction.FinishPolygon });
                 currentPolygon = null;
                 isDrawing = false;
             }
