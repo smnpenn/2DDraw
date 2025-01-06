@@ -21,35 +21,43 @@ namespace _2DDraw.ViewModels
             if (undoStack.Count > 0 && DrawingCanvas != null)
             {
                 // Pop the last line from the undo stack and push into redo stack
-                Line line = undoStack.Pop();
-                redoStack.Push(line);
+                DrawingOperation op = undoStack.Pop();
+                redoStack.Push(op);
 
-                // Find the polygon that contains the line
-                Polygon2D? polygon = Polygons.Find(p => p.Lines.Contains(line));
-
-                if (polygon != null)
+                if( op.Action == DrawingAction.FinishPolygon)
                 {
-                    polygon.Lines.Remove(line);
 
-                    // if undone line is the last one, mark polygon as unfinished
-                    if (line == polygon.LastLine)
-                    {
-                        polygon.IsFinished = false;
-                    }
-
-                    // set pos1 to startpoint of undone line if polygon is not empty (for preview)
-                    if (polygon.Lines.Count > 0)
-                    {
-                        position1 = new Point(line.X1, line.Y1);
-                        isDrawing = true;
-                    }
-                    else
-                    {
-                        isDrawing = false;
-                    }
                 }
+                else
+                {
+                    Line line = op.Line!;
 
-                currentPolygon = polygon;
+                    // Find the polygon that contains the line
+                    Polygon2D? polygon = Polygons.Find(p => p.Lines.Contains(line));
+
+                    if (polygon != null)
+                    {
+                        polygon.Lines.Remove(line);
+
+                        // if undone line is the last one, mark polygon as unfinished
+                        if (line == polygon.LastLine)
+                        {
+                            polygon.IsFinished = false;
+                        }
+
+                        // set pos1 to startpoint of undone line if polygon is not empty (for preview)
+                        if (polygon.Lines.Count > 0)
+                        {
+                            position1 = new Point(line.X1, line.Y1);
+                            isDrawing = true;
+                        }
+                        else
+                        {
+                            isDrawing = false;
+                        }
+                    }
+                    currentPolygon = polygon;
+                }
 
                 // Refresh the canvas
                 RedrawCanvas(DrawingCanvas);
@@ -62,37 +70,46 @@ namespace _2DDraw.ViewModels
             if (redoStack.Count > 0 && DrawingCanvas != null)
             {
                 // Pop the last line from the redo stack and push into undo stack
-                Line line = redoStack.Pop();
-                undoStack.Push(line);
+                DrawingOperation op = redoStack.Pop();
+                undoStack.Push(op);
 
-                Polygon2D? polygon = currentPolygon;
-
-                if (polygon != null)
+                if (op.Action == DrawingAction.FinishPolygon)
                 {
-                    polygon.Lines.Add(line);
 
-                    // if redone is the last line, mark polygon as finished
-                    if (polygon.LastLine == line)
+                }
+                else
+                {
+                    Line line = op.Line!;
+
+                    Polygon2D? polygon = currentPolygon;
+
+                    if (polygon != null)
                     {
-                        polygon.IsFinished = true;
+                        polygon.Lines.Add(line);
 
-                        // set currentPolygon to the next one or to null if its the last one
-                        if (polygon == Polygons.Last())
+                        // if redone is the last line, mark polygon as finished
+                        if (polygon.LastLine == line)
                         {
-                            currentPolygon = null;
+                            polygon.IsFinished = true;
+
+                            // set currentPolygon to the next one or to null if its the last one
+                            if (polygon == Polygons.Last())
+                            {
+                                currentPolygon = null;
+                            }
+                            else
+                            {
+                                currentPolygon = Polygons[Polygons.IndexOf(polygon) + 1];
+                            }
+
+                            isDrawing = false;
                         }
                         else
                         {
-                            currentPolygon = Polygons[Polygons.IndexOf(polygon) + 1];
+                            // set pos1 to endpoint of redone line
+                            position1 = new Point(line.X2, line.Y2);
+                            isDrawing = true;
                         }
-
-                        isDrawing = false;
-                    }
-                    else
-                    {
-                        // set pos1 to endpoint of redone line
-                        position1 = new Point(line.X2, line.Y2);
-                        isDrawing = true;
                     }
                 }
 
@@ -140,7 +157,7 @@ namespace _2DDraw.ViewModels
                 position2 = e.GetPosition(canvas);
                 Line line = DrawLine(canvas, position1, position2, Brushes.Black);
                 currentPolygon?.Lines.Add(line);
-                undoStack.Push(line);
+                undoStack.Push(new() { Line = line, Action = DrawingAction.DrawLine });
                 redoStack.Clear();
 
                 position1 = position2;
@@ -221,7 +238,7 @@ namespace _2DDraw.ViewModels
         private Polygon2D? currentPolygon;
         private bool isDrawing = false;
 
-        private Stack<Line> undoStack = new Stack<Line>();
-        private Stack<Line> redoStack = new Stack<Line>();
+        private Stack<DrawingOperation> undoStack = new Stack<DrawingOperation>();
+        private Stack<DrawingOperation> redoStack = new Stack<DrawingOperation>();
     }
 }
