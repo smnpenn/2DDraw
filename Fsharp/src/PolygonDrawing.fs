@@ -63,29 +63,62 @@ For FinishPolygon mesages:
  - if there is a current polygon, reset the current polygon to None and add the current polygon as a new elemnet to finishedPolygons.
 *)
 let updateModel (msg : Msg) (model : Model) =
-    model
+    match msg with
+    | AddPoint coord ->
+        match model.currentPolygon with
+        | None ->
+            // Start a new polygon with the first point
+            { model with currentPolygon = Some [coord] }
+        | Some polygon ->
+            // Add the new point to the current polygon
+            { model with currentPolygon = Some (coord :: polygon) }
+    | FinishPolygon ->
+        match model.currentPolygon with
+        | None ->
+            // No current polygon to finish; ignore the message
+            model
+        | Some polygon ->
+            // Move the current polygon to the finishedPolygons list
+            {
+                model with
+                    currentPolygon = None
+                    finishedPolygons = polygon :: model.finishedPolygons
+            }
+    | _ ->
+        // Leave other messages unhandled here
+        model
 
 // wraps an update function with undo/redo.
 let addUndoRedo (updateFunction : Msg -> Model -> Model) (msg : Msg) (model : Model) =
-    // first let us, handle the cursor position, which is not undoable, and handle undo/redo messages
-    // in a next step we actually run the "core" system logics.
     match msg with
-    | SetCursorPos p -> 
-        // update the mouse position and create a new model.
+    | SetCursorPos p ->
+        // Update the mouse position without affecting undo/redo
         { model with mousePos = p }
-    | Undo -> 
-        // TODO implement undo logics, HINT: restore the model stored in past, and replace the current
-        // state with it.
-        model
-    | Redo -> 
-        // TODO: same as undo
-        model
-    | _ -> 
-        // use the provided update function for all remaining messages
-        { updateFunction msg model with past = Some model }
+    | Undo ->
+        match model.past with
+        | None -> model // No past state, no changes
+        | Some previousModel ->
+            // Restore the past state and move the current state to the future
+            {
+                previousModel with
+                    future = Some model
+            }
+    | Redo ->
+        match model.future with
+        | None -> model // No future state, no changes
+        | Some futureModel ->
+            // Restore the future state and move the current state to the past
+            {
+                futureModel with
+                    past = Some model
+            }
+    | _ ->
+        // Use the provided update function for other messages, and manage undo history
+        let newModel = updateFunction msg model
+        { newModel with past = Some model; future = None }
 
 
-let update (msg : Msg) (model : Model)  =
+let update (msg : Msg) (model : Model) =
     let newModel = addUndoRedo updateModel msg model
     newModel, Cmd.none
 
